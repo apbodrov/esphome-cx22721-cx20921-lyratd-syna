@@ -37,7 +37,7 @@ psram:
 external_components:
   - source:
       type: local
-      path: esphome_src/esphome/components
+      path: esphome/components
     components: [cx_audio, cx_i2s]
 
 logger:
