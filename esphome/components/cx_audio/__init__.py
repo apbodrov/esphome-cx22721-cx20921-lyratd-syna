@@ -1,5 +1,4 @@
 import os
-
 import esphome.codegen as cg
 import esphome.config_validation as cv
 from esphome.const import CONF_ID
@@ -21,10 +20,10 @@ async def to_code(config):
     var = cg.new_Pvariable(config[CONF_ID])
     await cg.register_component(var, config)
 
-    # Use absolute paths
     this_dir = os.path.dirname(os.path.abspath(__file__))
     include_dir = os.path.join(this_dir, "include")
     lib_dir = os.path.join(this_dir, "lib")
+    lib_path = os.path.join(lib_dir, "libva_sdk_monolith.a")
 
     # Header files
     cg.add_build_flag(f"-I{include_dir}")
@@ -32,16 +31,9 @@ async def to_code(config):
     # Specific board and codec flags
     cg.add_build_flag("-DCONFIG_SYNA_V1_2_BOARD")
     cg.add_build_flag("-DVOICE_ASSISTANT_AVS")
-
-    # Linking the monolithic library
-    # We use add_platformio_option for the complex whole-archive flag
-    # to ensure PlatformIO doesn't mangle it.
-    cg.add_platformio_option(
-        "build_flags",
-        [
-            f"-L{lib_dir}",
-            "-lva_sdk_monolith",
-            f"-Wl,--whole-archive,{lib_dir}/libva_sdk_monolith.a,--no-whole-archive",
-            "-lstdc++",
-        ],
-    )
+    
+    # Use -L and -l for cleaner linking
+    cg.add_build_flag(f"-L{lib_dir}")
+    cg.add_build_flag("-Wl,--whole-archive,-lva_sdk_monolith,--no-whole-archive")
+    
+    cg.add_build_flag("-lstdc++")

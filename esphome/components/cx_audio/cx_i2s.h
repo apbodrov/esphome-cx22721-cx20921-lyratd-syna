@@ -16,6 +16,8 @@ class CXI2SMicrophone : public microphone::Microphone, public Component {
   void stop() override;
   void loop() override;
   void set_cx_audio(cx_audio::CXAudio *parent) { this->parent_ = parent; }
+  bool is_running() const { return this->state_ == microphone::STATE_RUNNING; }
+  void publish_data(const std::vector<uint8_t> &data);
 
  protected:
   cx_audio::CXAudio *parent_;
