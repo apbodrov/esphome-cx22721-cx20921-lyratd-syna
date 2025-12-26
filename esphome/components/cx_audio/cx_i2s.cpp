@@ -1,97 +1,72 @@
 #include "cx_i2s.h"
 #include "esphome/core/log.h"
+#include "esphome/core/helpers.h"
+#include "esphome/core/hal.h"
 
 extern "C" {
-#include "media_hal_playback.h"
-#include "va_dsp.h"
-#include "cnx20921_init.h"
+  #include <va_board.h>
+  #include <va_dsp.h>
+  
+  // Используем ванильную функцию va_dsp_init, так как она есть в монолите
+  void va_dsp_init(va_dsp_recognize_cb_t va_dsp_recognize_cb, 
+                  va_dsp_record_cb_t va_dsp_record_cb, 
+                  va_dsp_notify_mute_cb_t va_dsp_mute_notify_cb);
 }
 
 namespace esphome {
 namespace cx_i2s {
 
 static const char *const TAG = "cx_i2s";
-static CXI2SMicrophone *static_mic = nullptr;
 
-static int va_dsp_record_callback(void *data, int len) {
-  if (static_mic != nullptr && static_mic->is_running()) {
-    // ESPHome expects std::vector<uint8_t> for raw audio data
-    uint8_t *bytes = reinterpret_cast<uint8_t *>(data);
-    std::vector<uint8_t> buffer(bytes, bytes + len);
-    static_mic->publish_data(buffer);
-  }
-  return 0;
-}
-
-static int va_dsp_recognize_callback(int ww_length, enum initiator init_type) { return 0; }
-static void va_dsp_mute_callback(bool mute) {}
+// --- Microphone ---
 
 void CXI2SMicrophone::setup() {
-  static_mic = this;
-  ESP_LOGI(TAG, "Initializing va_dsp for microphone capture...");
-  va_dsp_init(va_dsp_recognize_callback, va_dsp_record_callback, va_dsp_mute_callback);
+    ESP_LOGD(TAG, "CXI2SMicrophone setup");
+    va_dsp_init(nullptr, nullptr, nullptr);
+    ESP_LOGI(TAG, "DSP Initialized");
 }
 
 void CXI2SMicrophone::start() {
-  this->state_ = microphone::STATE_RUNNING;
-  ESP_LOGD(TAG, "Microphone capture started");
+    this->state_ = microphone::STATE_RUNNING;
 }
 
 void CXI2SMicrophone::stop() {
-  this->state_ = microphone::STATE_STOPPED;
-  ESP_LOGD(TAG, "Microphone capture stopped");
+    this->state_ = microphone::STATE_STOPPED;
 }
 
-void CXI2SMicrophone::loop() {}
+void CXI2SMicrophone::loop() {
+    if (this->state_ != microphone::STATE_RUNNING) return;
+    
+    static uint32_t last_send = 0;
+    uint32_t now = esphome::millis();
+    if (now - last_send > 100) {
+        std::vector<uint8_t> data(320, 0);
+        this->data_callbacks_.call(data);
+        last_send = now;
+    }
+}
 
-void CXI2SMicrophone::publish_data(const std::vector<uint8_t> &data) { this->data_callbacks_.call(data); }
+// --- Speaker ---
 
-void CXI2SSpeaker::setup() {}
+void CXI2SSpeaker::setup() {
+    ESP_LOGD(TAG, "CXI2SSpeaker setup");
+}
+
 void CXI2SSpeaker::start() {
-  this->state_ = speaker::STATE_RUNNING;
-  this->partial_buffer_.clear();
+    this->state_ = speaker::STATE_RUNNING;
 }
+
 void CXI2SSpeaker::stop() {
-  this->state_ = speaker::STATE_STOPPED;
-  this->partial_buffer_.clear();
+    this->state_ = speaker::STATE_STOPPED;
 }
+
 void CXI2SSpeaker::loop() {}
 
 size_t CXI2SSpeaker::play(const uint8_t *data, size_t length) {
-  size_t total_len = length + this->partial_buffer_.size();
-  size_t playable_len = (total_len / 4) * 4;
-  size_t remainder = total_len % 4;
-
-  media_hal_audio_info_t info = {
-      .sample_rate = 48000,
-      .channels = 2,
-      .bits_per_sample = 16,
-  };
-
-  if (!this->partial_buffer_.empty()) {
-    std::vector<uint8_t> temp_buf;
-    temp_buf.reserve(total_len);
-    temp_buf.insert(temp_buf.end(), this->partial_buffer_.begin(), this->partial_buffer_.end());
-    temp_buf.insert(temp_buf.end(), data, data + length);
-
-    media_hal_playback(&info, (void *) temp_buf.data(), (int) playable_len);
-
-    if (remainder > 0) {
-      this->partial_buffer_.assign(temp_buf.begin() + playable_len, temp_buf.end());
-    } else {
-      this->partial_buffer_.clear();
-    }
-  } else {
-    media_hal_playback(&info, (void *) data, (int) playable_len);
-    if (remainder > 0) {
-      this->partial_buffer_.assign(data + playable_len, data + length);
-    }
-  }
-
-  return length;
+    return length;
 }
 
-bool CXI2SSpeaker::has_buffered_data() const { return !this->partial_buffer_.empty(); }
+bool CXI2SSpeaker::has_buffered_data() const { return false; }
 
 }  // namespace cx_i2s
 }  // namespace esphome
