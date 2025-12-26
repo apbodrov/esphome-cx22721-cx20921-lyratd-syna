@@ -31,87 +31,83 @@
 static const char *TAG = "[va_mem_utils]";
 
 enum va_mem_alloc_op {
-    MALLOC,
-    REALLOC,
+  MALLOC,
+  REALLOC,
 };
 
-static void *va_mem_alloc_op(void *ptr, size_t size, enum va_mem_region region, enum va_mem_alloc_op op)
-{
-    void *nptr = NULL;
-    switch (region) {
+static void *va_mem_alloc_op(void *ptr, size_t size, enum va_mem_region region, enum va_mem_alloc_op op) {
+  void *nptr = NULL;
+  switch (region) {
     case VA_MEM_INTERNAL:
-        switch (op) {
+      switch (op) {
         case MALLOC:
-            nptr = heap_caps_calloc(1, size, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
-            break;
+          nptr = heap_caps_calloc(1, size, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+          break;
         case REALLOC:
-            nptr = heap_caps_realloc(ptr, size, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
-            break;
+          nptr = heap_caps_realloc(ptr, size, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+          break;
         default:
-            break;
-        }
-        break;
+          break;
+      }
+      break;
     case VA_MEM_EXTERNAL:
-        switch (op) {
+      switch (op) {
         case MALLOC:
-            nptr = heap_caps_calloc(1, size, MALLOC_CAP_SPIRAM);
-            break;
+          nptr = heap_caps_calloc(1, size, MALLOC_CAP_SPIRAM);
+          break;
         case REALLOC:
-            nptr = heap_caps_realloc(ptr, size, MALLOC_CAP_SPIRAM);
-            break;
+          nptr = heap_caps_realloc(ptr, size, MALLOC_CAP_SPIRAM);
+          break;
         default:
-            break;
-        }
-        break;
+          break;
+      }
+      break;
     default:
-        /*
-        case DEFAULT:
-        switch (op) {
-        case MALLOC:
-            nptr = heap_caps_calloc_default(1, size);
-            break;
-        case REALLOC:
-            nptr = heap_caps_realloc_default(ptr, size);
-            break;
-        default:
-            break;
-        }
-        */
-        break;
-    }
+      /*
+      case DEFAULT:
+      switch (op) {
+      case MALLOC:
+          nptr = heap_caps_calloc_default(1, size);
+          break;
+      case REALLOC:
+          nptr = heap_caps_realloc_default(ptr, size);
+          break;
+      default:
+          break;
+      }
+      */
+      break;
+  }
 
 #ifdef CONFIG_VA_MEM_DEBUG
-    if (nptr) {
-        printf("%s: %p: %s %d bytes from RAM %d\n", TAG, nptr, op == REALLOC ? "Reallocated" : "Allocated", size, region);
-    } else {
-        printf("%s: Failed to %s %d bytes from RAM %d\n", TAG, op == REALLOC ? "reallocate" : "allocate", size, region);
-    }
-    va_mem_print_stats(TAG);
+  if (nptr) {
+    printf("%s: %p: %s %d bytes from RAM %d\n", TAG, nptr, op == REALLOC ? "Reallocated" : "Allocated", size, region);
+  } else {
+    printf("%s: Failed to %s %d bytes from RAM %d\n", TAG, op == REALLOC ? "reallocate" : "allocate", size, region);
+  }
+  va_mem_print_stats(TAG);
 #endif /* CONFIG_VA_MEM_DEBUG */
-    return nptr;
+  return nptr;
 }
 
-void va_mem_print_stats(const char *event)
-{
-    printf("%s: INTERNAL-> Available: %d, Largest free block: %d\n", event, heap_caps_get_free_size(MALLOC_CAP_8BIT | MALLOC_CAP_INTERNAL), heap_caps_get_largest_free_block(MALLOC_CAP_8BIT | MALLOC_CAP_INTERNAL));
-    printf("%s: EXTERNAL-> Available: %d, Largest free block: %d\n", event, heap_caps_get_free_size(MALLOC_CAP_SPIRAM), heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM));
+void va_mem_print_stats(const char *event) {
+  printf("%s: INTERNAL-> Available: %d, Largest free block: %d\n", event,
+         heap_caps_get_free_size(MALLOC_CAP_8BIT | MALLOC_CAP_INTERNAL),
+         heap_caps_get_largest_free_block(MALLOC_CAP_8BIT | MALLOC_CAP_INTERNAL));
+  printf("%s: EXTERNAL-> Available: %d, Largest free block: %d\n", event, heap_caps_get_free_size(MALLOC_CAP_SPIRAM),
+         heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM));
 }
 
-void va_mem_free(void *ptr)
-{
-    heap_caps_free(ptr);
+void va_mem_free(void *ptr) {
+  heap_caps_free(ptr);
 #ifdef CONFIG_VA_MEM_DEBUG
-    printf("%s: %p: Freed memory\n", TAG, ptr);
-    va_mem_print_stats(TAG);
+  printf("%s: %p: Freed memory\n", TAG, ptr);
+  va_mem_print_stats(TAG);
 #endif /* CONFIG_VA_MEM_DEBUG */
 }
 
-void *va_mem_alloc(size_t size, enum va_mem_region region)
-{
-    return va_mem_alloc_op(NULL, size, region, MALLOC);
-}
+void *va_mem_alloc(size_t size, enum va_mem_region region) { return va_mem_alloc_op(NULL, size, region, MALLOC); }
 
-void *va_mem_realloc(void *ptr, size_t size, enum va_mem_region region)
-{
-    return va_mem_alloc_op(ptr, size, region, REALLOC);
+void *va_mem_realloc(void *ptr, size_t size, enum va_mem_region region) {
+  return va_mem_alloc_op(ptr, size, region, REALLOC);
 }
