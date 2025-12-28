@@ -5,6 +5,8 @@
 #include <driver/gpio.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
+#include <freertos/semphr.h>
+#include "cnx20921_init.h"
 
 extern "C" {
 
@@ -29,12 +31,22 @@ esp_err_t va_nvs_get_i8(const char *key, int8_t *val) {
 }
 
 // --- DSP Initialization (FORCE GPIO 21 FOR V1.2) ---
-esp_err_t cnx20921_init(gpio_num_t reset_pin, gpio_num_t irq_pin) {
+// ЭТАЛОН: Сигнатура должна совпадать с cnx20921_init.h из монолита
+// ВАЖНО: Эта функция вызывается из va_dsp_init() в монолите
+// Для микрофона нужна полная инициализация, но мы делаем только hardware reset
+// Полная инициализация будет вызвана позже в CXI2SMicrophone::setup()
+extern "C" {
+esp_err_t cnx20921_init(SemaphoreHandle_t semph, int int_pin, int mute_pin, cnx_mode_t flash_fw) {
     // На LyraTD V1.2 Reset DSP - это всегда GPIO 21. 
-    // Мы игнорируем reset_pin из SDK (который часто передает 36 или 227).
+    // Мы игнорируем параметры из SDK и делаем только hardware reset
+    (void)semph;
+    (void)int_pin;
+    (void)mute_pin;
+    (void)flash_fw;
+    
     gpio_num_t actual_reset = GPIO_NUM_21;
     
-    ESP_LOGI("VA_PATCH", "cnx20921_init: FORCING Hardware Reset on GPIO %d", actual_reset);
+    ESP_LOGI("VA_PATCH", "cnx20921_init: Hardware Reset on GPIO %d (stub - full init in microphone setup)", actual_reset);
     
     gpio_config_t io_conf;
     io_conf.intr_type = GPIO_INTR_DISABLE;
@@ -49,7 +61,9 @@ esp_err_t cnx20921_init(gpio_num_t reset_pin, gpio_num_t irq_pin) {
     gpio_set_level(actual_reset, 1);
     vTaskDelay(pdMS_TO_TICKS(500));
     
+    // Полная инициализация будет вызвана в CXI2SMicrophone::setup()
     return ESP_OK;
+}
 }
 
 // --- Audio Resample Patch ---

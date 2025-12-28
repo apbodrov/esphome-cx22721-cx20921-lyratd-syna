@@ -1,7 +1,7 @@
 esphome:
   name: "minimal-monolith"
   platformio_options:
-    board_build.partitions: partitions_no_ota.csv
+    board_build.partitions: /Users/andreibodrov/work/codec/partitions_no_ota.csv
   on_boot:
     priority: -200
     then:
@@ -11,6 +11,7 @@ esphome:
 
 esp32:
   board: esp32dev
+  flash_size: 16MB
   framework:
     type: esp-idf
     version: 4.4.8
@@ -78,3 +79,12 @@ media_player:
 voice_assistant:
   microphone: my_mic
   speaker: my_speaker
+
+sensor:
+  - platform: sound_level
+    microphone: my_mic
+    passive: false
+    rms:
+      name: "RMS"
+    peak:
+      name: "Peak"

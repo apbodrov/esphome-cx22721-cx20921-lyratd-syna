@@ -27,6 +27,10 @@
 #include <esp_err.h>
 #include "va_dsp.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #define PHRASE_LEN 32000 * 0.6   // 32000 * (no. of secs of wakeword)
 #define PREROLL_LEN 32000 * 1.1  // 32000 * (no.of sec)  (500ms of Preroll + 600ms of Alexa wakeword)
 
@@ -43,5 +47,9 @@ size_t cnx20921_stream_audio(int prt_num, void *data, size_t max_len);
 void cnx20921_stop_capture();
 void cnx20921_mic_mute();
 void cnx20921_mic_unmute();
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* CNX20921_INIT_H */

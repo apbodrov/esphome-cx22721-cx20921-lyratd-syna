@@ -15,6 +15,7 @@ monolith = os.path.join(
 )
 
 print(f"CX_AUDIO [LINKER FIX]: Applying isolation. Monolith: {monolith}")
+print(f"CX_AUDIO [LINKER FIX]: libcnx-ipc.a already included in monolith")
 
 # Добавляем флаги ТОЛЬКО для приложения
 # env.Append(LINKFLAGS=...) в PlatformIO ESP-IDF сборке обычно
@@ -24,6 +25,9 @@ env.Append(
         "-Wl,-u,va_board_init",
         "-Wl,-u,media_hal_get_handle",
         "-Wl,-u,va_dsp_init",
+        "-Wl,-u,cnx20921_init",
+        "-Wl,-u,cnx20921_stream_audio",
+        "-Wl,-u,va_dsp_hal_init",
         "-Wl,--whole-archive",
         monolith,
         "-Wl,--no-whole-archive",
