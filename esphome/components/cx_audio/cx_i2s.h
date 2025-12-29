@@ -24,6 +24,8 @@ class CXI2SMicrophone : public microphone::Microphone, public Component {
  protected:
   cx_audio::CXAudio *parent_;
   float mic_gain_{24.0f};  // Default 24dB
+  bool gain_set_successfully_{false};  // Флаг успешной установки гейна
+  uint32_t gain_retry_counter_{0};  // Счетчик попыток установки гейна
 };
 
 class CXI2SSpeaker : public speaker::Speaker, public Component {

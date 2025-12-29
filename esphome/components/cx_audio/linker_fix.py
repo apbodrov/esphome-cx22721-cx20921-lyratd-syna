@@ -79,7 +79,8 @@ env.Append(
         "-Wl,-u,va_board_init",
         "-Wl,-u,media_hal_get_handle",
         "-Wl,-u,va_dsp_init",
-        "-Wl,-u,cnx20921_init",
+        "-Wl,-u,cnx20921_init",  # Наша wrapper функция
+        "-Wl,-u,cnx20921_init_unused",  # Реальная функция из библиотеки
         "-Wl,-u,cnx20921_stream_audio",
         "-Wl,-u,va_dsp_hal_init",
         "-Wl,--whole-archive",

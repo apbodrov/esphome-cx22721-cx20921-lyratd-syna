@@ -33,36 +33,39 @@ esp_err_t va_nvs_get_i8(const char *key, int8_t *val) {
 // --- DSP Initialization (FORCE GPIO 21 FOR V1.2) ---
 // ЭТАЛОН: Сигнатура должна совпадать с cnx20921_init.h из монолита
 // ВАЖНО: Эта функция вызывается из va_dsp_init() в монолите
-// Для микрофона нужна полная инициализация, но мы делаем только hardware reset
-// Полная инициализация будет вызвана позже в CXI2SMicrophone::setup()
+// 
+// В библиотеке функция переименована в cnx20921_init_unused
+// Создаем wrapper, который вызывает реальную функцию из библиотеки
 extern "C" {
+// Объявляем реальную функцию из библиотеки (переименованную)
+extern esp_err_t cnx20921_init_unused(SemaphoreHandle_t semph, int int_pin, int mute_pin, cnx_mode_t flash_fw);
+
 esp_err_t cnx20921_init(SemaphoreHandle_t semph, int int_pin, int mute_pin, cnx_mode_t flash_fw) {
-    // На LyraTD V1.2 Reset DSP - это всегда GPIO 21. 
-    // Мы игнорируем параметры из SDK и делаем только hardware reset
-    (void)semph;
-    (void)int_pin;
-    (void)mute_pin;
-    (void)flash_fw;
+    // ВАЖНО: Условия для работы полной инициализации:
+    // - I2C driver должен быть установлен (ESPHome делает это)
+    // - cnx_pin_config() должна быть вызвана ПЕРЕД va_dsp_init()
+    // - va_dsp_hal_init() должна быть вызвана ПЕРЕД cnx20921_init()
+    // - Функции i2c_write_imp и i2c_read_imp должны быть в библиотеке (они там есть)
+    //
+    // Полная версия cnx20921_init_unused() из libcnx-ipc.a:
+    // 1. Делает hardware reset
+    // 2. Вызывает OpenI2cDevice() для инициализации I2C
+    // 3. Устанавливает I2C callbacks через SetupI2cWriteMemCallback/SetupI2cReadMemCallback
+    // 4. Инициализирует DSP через SendCmdV()
     
-    gpio_num_t actual_reset = GPIO_NUM_21;
+    ESP_LOGI("VA_PATCH", "cnx20921_init: Calling REAL function from library (cnx20921_init_unused)");
+    ESP_LOGI("VA_PATCH", "  Parameters: int_pin=%d, mute_pin=%d, flash_fw=%d", int_pin, mute_pin, flash_fw);
     
-    ESP_LOGI("VA_PATCH", "cnx20921_init: Hardware Reset on GPIO %d (stub - full init in microphone setup)", actual_reset);
+    // Вызываем реальную функцию из библиотеки
+    esp_err_t ret = cnx20921_init_unused(semph, int_pin, mute_pin, flash_fw);
     
-    gpio_config_t io_conf;
-    io_conf.intr_type = GPIO_INTR_DISABLE;
-    io_conf.mode = GPIO_MODE_OUTPUT;
-    io_conf.pin_bit_mask = (1ULL << actual_reset);
-    io_conf.pull_down_en = GPIO_PULLDOWN_DISABLE;
-    io_conf.pull_up_en = GPIO_PULLUP_DISABLE;
-    gpio_config(&io_conf);
+    if (ret != ESP_OK) {
+        ESP_LOGE("VA_PATCH", "cnx20921_init_unused failed: %s", esp_err_to_name(ret));
+    } else {
+        ESP_LOGI("VA_PATCH", "cnx20921_init_unused completed successfully");
+    }
     
-    gpio_set_level(actual_reset, 0);
-    vTaskDelay(pdMS_TO_TICKS(100)); // Честный сброс
-    gpio_set_level(actual_reset, 1);
-    vTaskDelay(pdMS_TO_TICKS(500));
-    
-    // Полная инициализация будет вызвана в CXI2SMicrophone::setup()
-    return ESP_OK;
+    return ret;
 }
 }
 
