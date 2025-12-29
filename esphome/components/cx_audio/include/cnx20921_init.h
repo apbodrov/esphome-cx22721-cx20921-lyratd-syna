@@ -48,6 +48,10 @@ void cnx20921_stop_capture();
 void cnx20921_mic_mute();
 void cnx20921_mic_unmute();
 
+// Microphone gain control
+int cx20921SetMicGain(int gain_db);
+int cx20921GetMicGain(void);
+
 #ifdef __cplusplus
 }
 #endif

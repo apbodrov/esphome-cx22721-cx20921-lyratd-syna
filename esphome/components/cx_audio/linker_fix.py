@@ -20,18 +20,41 @@ except:
 if monolith is None or not os.path.exists(monolith):
     # PROJECT_DIR может быть esphome_src или esphome_src/.esphome/build/...
     project_dir = env["PROJECT_DIR"]
-    
+
     # Пробуем разные варианты путей
     paths_to_try = [
-        os.path.join(project_dir, "esphome", "components", "cx_audio", "lib", "libva_sdk_monolith.a"),
-        os.path.join(os.path.dirname(project_dir), "esphome", "components", "cx_audio", "lib", "libva_sdk_monolith.a"),
+        os.path.join(
+            project_dir,
+            "esphome",
+            "components",
+            "cx_audio",
+            "lib",
+            "libva_sdk_monolith.a",
+        ),
+        os.path.join(
+            os.path.dirname(project_dir),
+            "esphome",
+            "components",
+            "cx_audio",
+            "lib",
+            "libva_sdk_monolith.a",
+        ),
     ]
-    
+
     # Если PROJECT_DIR содержит .esphome, поднимаемся выше
     if ".esphome" in project_dir:
         base_dir = project_dir.split(".esphome")[0]
-        paths_to_try.append(os.path.join(base_dir, "esphome", "components", "cx_audio", "lib", "libva_sdk_monolith.a"))
-    
+        paths_to_try.append(
+            os.path.join(
+                base_dir,
+                "esphome",
+                "components",
+                "cx_audio",
+                "lib",
+                "libva_sdk_monolith.a",
+            )
+        )
+
     for path in paths_to_try:
         if os.path.exists(path):
             monolith = path
@@ -39,14 +62,14 @@ if monolith is None or not os.path.exists(monolith):
 
 # Если все еще не нашли - ошибка
 if monolith is None or not os.path.exists(monolith):
-    print(f"ERROR: Cannot find libva_sdk_monolith.a")
+    print("ERROR: Cannot find libva_sdk_monolith.a")
     print(f"  PROJECT_DIR: {env['PROJECT_DIR']}")
-    if 'script_path' in locals():
+    if "script_path" in locals():
         print(f"  Script path: {script_path}")
-    raise FileNotFoundError(f"libva_sdk_monolith.a not found")
+    raise FileNotFoundError("libva_sdk_monolith.a not found")
 
 print(f"CX_AUDIO [LINKER FIX]: Applying isolation. Monolith: {monolith}")
-print(f"CX_AUDIO [LINKER FIX]: libcnx-ipc.a already included in monolith")
+print("CX_AUDIO [LINKER FIX]: libcnx-ipc.a already included in monolith")
 
 # Добавляем флаги ТОЛЬКО для приложения
 # env.Append(LINKFLAGS=...) в PlatformIO ESP-IDF сборке обычно

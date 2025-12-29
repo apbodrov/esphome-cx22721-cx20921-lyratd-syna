@@ -16,6 +16,9 @@ extern "C" {
   void va_dsp_init(va_dsp_recognize_cb_t va_dsp_recognize_cb, 
                   va_dsp_record_cb_t va_dsp_record_cb, 
                   va_dsp_notify_mute_cb_t va_dsp_mute_notify_cb);
+  // Microphone gain functions from SDK
+  int cx20921SetMicGain(int gain_db);
+  int cx20921GetMicGain(void);
 }
 
 namespace esphome {
@@ -65,6 +68,18 @@ void CXI2SMicrophone::setup() {
     }
     
     ESP_LOGI(TAG, "CX20921 DSP chip initialized successfully");
+    
+    // Устанавливаем гейн микрофона после инициализации DSP
+    if (this->mic_gain_ > 0) {
+        int gain_db = (int)this->mic_gain_;
+        int ret = cx20921SetMicGain(gain_db);
+        if (ret == 0) {
+            ESP_LOGI(TAG, "Microphone gain set to %d dB", gain_db);
+        } else {
+            ESP_LOGW(TAG, "Failed to set microphone gain: %d", ret);
+        }
+    }
+    
     ESP_LOGI(TAG, "Microphone setup complete");
     
     // Автоматически запускаем микрофон после инициализации
@@ -82,24 +97,63 @@ void CXI2SMicrophone::stop() {
     ESP_LOGI(TAG, "Microphone stopped");
 }
 
+bool CXI2SMicrophone::set_mic_gain(float mic_gain) {
+    // CX20921 поддерживает гейн от 0 до 30 dB (обычно)
+    // Ограничиваем диапазон для безопасности
+    this->mic_gain_ = clamp<float>(mic_gain, 0.0f, 30.0f);
+    
+    // Если микрофон уже инициализирован (не в состоянии STOPPED), применяем гейн сразу
+    if (this->state_ != microphone::STATE_STOPPED && !this->is_failed()) {
+        int gain_db = (int)this->mic_gain_;
+        int ret = cx20921SetMicGain(gain_db);
+        if (ret == 0) {
+            ESP_LOGI(TAG, "Microphone gain updated to %d dB", gain_db);
+            return true;
+        } else {
+            ESP_LOGW(TAG, "Failed to set microphone gain: %d", ret);
+            return false;
+        }
+    }
+    
+    // Если еще не инициализирован, гейн будет установлен в setup()
+    return true;
+}
+
 void CXI2SMicrophone::loop() {
     if (this->state_ != microphone::STATE_RUNNING) return;
     
-    // ЭТАЛОН: Прямое чтение из I2S1 (как в рабочем коммите da36104)
-    // DSP шлет обработанный голос в I2S1
-    uint8_t buffer[320]; // 160 samples * 2 bytes
+    // ЭТАЛОН: I2S1 настроен на стерео (2 канала) согласно va_board.c:
+    // "Reading mono channel on I2S produces data mirroring, 0-4KHz mirrored to 4-8KHz
+    //  For better audio performance, we read stereo data and then down sample it to mono"
+    // i2s_set_clk(I2S_NUM_1, 16000, 16, 2); // 16kHz, 16bit, 2 channels (stereo)
+    
+    // Читаем стерео данные: 160 samples * 2 channels * 2 bytes = 640 bytes
+    uint8_t stereo_buffer[640]; // Стерео данные от DSP
     size_t bytes_read = 0;
-    esp_err_t err = i2s_read(I2S_NUM_1, buffer, sizeof(buffer), &bytes_read, pdMS_TO_TICKS(10));
+    esp_err_t err = i2s_read(I2S_NUM_1, stereo_buffer, sizeof(stereo_buffer), &bytes_read, pdMS_TO_TICKS(10));
     
     if (err == ESP_OK && bytes_read > 0) {
-        std::vector<uint8_t> data(buffer, buffer + bytes_read);
-        this->data_callbacks_.call(data);
+        // Конвертируем стерео в моно: берем только левый канал (первые 2 байта каждого сэмпла)
+        // Формат стерео: [L0 L1 R0 R1 L2 L3 R2 R3 ...] где L/R - left/right каналы
+        size_t stereo_samples = bytes_read / 4; // Каждый стерео-сэмпл = 4 байта (2 байта L + 2 байта R)
+        size_t mono_bytes = stereo_samples * 2; // Моно = 2 байта на сэмпл
+        
+        std::vector<uint8_t> mono_data;
+        mono_data.reserve(mono_bytes);
+        
+        // Извлекаем левый канал (первые 2 байта каждого стерео-сэмпла)
+        for (size_t i = 0; i < stereo_samples; i++) {
+            mono_data.push_back(stereo_buffer[i * 4 + 0]);     // L low byte
+            mono_data.push_back(stereo_buffer[i * 4 + 1]);     // L high byte
+        }
+        
+        this->data_callbacks_.call(mono_data);
         
         // Логируем периодически для отладки
         static int log_counter = 0;
         if (++log_counter >= 100) {  // Каждые ~100 вызовов (примерно раз в секунду)
             log_counter = 0;
-            ESP_LOGD(TAG, "Microphone: received %zu bytes from I2S1", bytes_read);
+            ESP_LOGD(TAG, "Microphone: read %zu stereo bytes -> %zu mono bytes from I2S1", bytes_read, mono_bytes);
         }
     } else if (err != ESP_OK) {
         // Ошибка чтения
