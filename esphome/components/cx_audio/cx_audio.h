@@ -24,9 +24,12 @@ class CXAudio : public Component {
   float get_setup_priority() const override { return setup_priority::HARDWARE; }
 
   media_hal_t *get_hal() { return this->hal_; }
+  
+  static SemaphoreHandle_t get_i2c_semaphore();
 
  private:
   media_hal_t *hal_{nullptr};
+  static SemaphoreHandle_t i2c_sem_;
 };
 
 }  // namespace cx_audio

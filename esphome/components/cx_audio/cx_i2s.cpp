@@ -1,4 +1,5 @@
 #include "cx_i2s.h"
+#include "cx_audio.h"
 #include "esphome/core/log.h"
 #include "esphome/core/helpers.h"
 #include "esphome/core/hal.h"
@@ -13,9 +14,10 @@ extern "C" {
   #include <va_dsp.h>
   #include <va_dsp_hal.h>
   #include "cnx20921_init.h"
-  void va_dsp_init(va_dsp_recognize_cb_t va_dsp_recognize_cb, 
-                  va_dsp_record_cb_t va_dsp_record_cb, 
-                  va_dsp_notify_mute_cb_t va_dsp_mute_notify_cb);
+  // Используем адаптеры вместо прямых вызовов SDK
+  void esphome_va_dsp_init(va_dsp_recognize_cb_t recognize_cb,
+                           va_dsp_record_cb_t record_cb,
+                           va_dsp_notify_mute_cb_t mute_cb);
   // Microphone gain functions from SDK
   int cx20921SetMicGain(int gain_db);
   int cx20921GetMicGain(void);
@@ -31,10 +33,9 @@ static const char *const TAG = "cx_i2s";
 void CXI2SMicrophone::setup() {
     ESP_LOGI(TAG, "Setting up CX I2S Microphone...");
     
-    // ЭТАЛОН: Инициализация DSP для микрофона
-    // va_dsp_init() из монолита уже вызывает va_dsp_hal_init() внутри себя
-    // и создает очередь команд и DMA буфер
-    va_dsp_init(nullptr, nullptr, nullptr);
+    // Используем адаптер esphome_va_dsp_init вместо прямого va_dsp_init
+    // Адаптер гарантирует правильный порядок инициализации: очередь создается ДО va_boot_dsp_signal()
+    esphome_va_dsp_init(nullptr, nullptr, nullptr);
     
     // Инициализируем сам DSP чип CX20921 после va_dsp_init()
     // На LyraTD V1.2: reset_pin=21 (GPIO21), int_pin=36, mute_pin=27
@@ -44,7 +45,7 @@ void CXI2SMicrophone::setup() {
     
     ESP_LOGI(TAG, "Initializing CX20921 DSP chip (reset=%d, int=%d, mute=%d)...", reset_pin, int_pin, mute_pin);
     
-    // Настраиваем reset pin (если еще не настроен)
+    // Настраиваем reset pin
     gpio_config_t io_conf = {
         .pin_bit_mask = (1ULL << reset_pin),
         .mode = GPIO_MODE_OUTPUT,
@@ -53,12 +54,23 @@ void CXI2SMicrophone::setup() {
         .intr_type = GPIO_INTR_DISABLE
     };
     gpio_config(&io_conf);
-    gpio_set_level(reset_pin, 1);  // Держим включенным
+    
+    // Hardware Reset Sequence
+    ESP_LOGI(TAG, "Performing hardware reset of CX20921...");
+    gpio_set_level(reset_pin, 0);
+    vTaskDelay(pdMS_TO_TICKS(50));
+    gpio_set_level(reset_pin, 1);
+    vTaskDelay(pdMS_TO_TICKS(200));
     
     // Инициализируем DSP чип через cnx20921_init()
-    // Эта функция уже определена в va_patch.cpp как stub (hardware reset)
-    // Полная инициализация будет вызвана из va_dsp_init() через va_dsp_hal_init()
-    SemaphoreHandle_t semph = xSemaphoreCreateMutex();
+    // Эта функция определена в va_patch.cpp как wrapper, который вызывает
+    // реальную функцию cnx20921_init_unused() из библиотеки
+    // Полная инициализация включает:
+    // 1. Hardware reset
+    // 2. Инициализацию I2C через OpenI2cDevice()
+    // 3. Установку I2C callbacks
+    // 4. Инициализацию DSP через SendCmdV()
+    SemaphoreHandle_t semph = cx_audio::CXAudio::get_i2c_semaphore();
     esp_err_t ret = cnx20921_init(semph, int_pin, mute_pin, NO_FLASH_FW);
     
     if (ret != ESP_OK) {
@@ -67,16 +79,20 @@ void CXI2SMicrophone::setup() {
         return;
     }
     
-    ESP_LOGI(TAG, "CX20921 DSP chip initialized successfully");
+    ESP_LOGI(TAG, "CX20921 DSP chip initialized successfully (I2C callbacks set)");
     
-    // Устанавливаем гейн микрофона после инициализации DSP
+    // Даем время DSP на завершение инициализации перед установкой гейна
+    vTaskDelay(pdMS_TO_TICKS(500));
+    
+    // Устанавливаем гейн микрофона после полной инициализации DSP
     if (this->mic_gain_ > 0) {
         int gain_db = (int)this->mic_gain_;
-        int ret = cx20921SetMicGain(gain_db);
-        if (ret == 0) {
+        ESP_LOGI(TAG, "Setting microphone gain to %d dB...", gain_db);
+        int ret_gain = cx20921SetMicGain(gain_db);
+        if (ret_gain == 0) {
             ESP_LOGI(TAG, "Microphone gain set to %d dB", gain_db);
         } else {
-            ESP_LOGW(TAG, "Failed to set microphone gain: %d", ret);
+            ESP_LOGW(TAG, "Failed to set microphone gain: %d (I2C may not be ready)", ret_gain);
         }
     }
     
@@ -122,45 +138,28 @@ bool CXI2SMicrophone::set_mic_gain(float mic_gain) {
 void CXI2SMicrophone::loop() {
     if (this->state_ != microphone::STATE_RUNNING) return;
     
-    // ЭТАЛОН: I2S1 настроен на стерео (2 канала) согласно va_board.c:
-    // "Reading mono channel on I2S produces data mirroring, 0-4KHz mirrored to 4-8KHz
-    //  For better audio performance, we read stereo data and then down sample it to mono"
-    // i2s_set_clk(I2S_NUM_1, 16000, 16, 2); // 16kHz, 16bit, 2 channels (stereo)
-    
     // Читаем стерео данные: 160 samples * 2 channels * 2 bytes = 640 bytes
-    uint8_t stereo_buffer[640]; // Стерео данные от DSP
+    uint8_t stereo_buffer[640]; 
     size_t bytes_read = 0;
     esp_err_t err = i2s_read(I2S_NUM_1, stereo_buffer, sizeof(stereo_buffer), &bytes_read, pdMS_TO_TICKS(10));
     
     if (err == ESP_OK && bytes_read > 0) {
         // Конвертируем стерео в моно: берем только левый канал (первые 2 байта каждого сэмпла)
-        // Формат стерео: [L0 L1 R0 R1 L2 L3 R2 R3 ...] где L/R - left/right каналы
-        size_t stereo_samples = bytes_read / 4; // Каждый стерео-сэмпл = 4 байта (2 байта L + 2 байта R)
-        size_t mono_bytes = stereo_samples * 2; // Моно = 2 байта на сэмпл
-        
+        size_t stereo_samples = bytes_read / 4;
         std::vector<uint8_t> mono_data;
-        mono_data.reserve(mono_bytes);
+        mono_data.reserve(stereo_samples * 2);
         
-        // Извлекаем левый канал (первые 2 байта каждого стерео-сэмпла)
         for (size_t i = 0; i < stereo_samples; i++) {
-            mono_data.push_back(stereo_buffer[i * 4 + 0]);     // L low byte
-            mono_data.push_back(stereo_buffer[i * 4 + 1]);     // L high byte
+            mono_data.push_back(stereo_buffer[i * 4 + 0]); // Low byte
+            mono_data.push_back(stereo_buffer[i * 4 + 1]); // High byte
         }
         
         this->data_callbacks_.call(mono_data);
         
-        // Логируем периодически для отладки
         static int log_counter = 0;
-        if (++log_counter >= 100) {  // Каждые ~100 вызовов (примерно раз в секунду)
+        if (++log_counter >= 100) {
             log_counter = 0;
-            ESP_LOGD(TAG, "Microphone: read %zu stereo bytes -> %zu mono bytes from I2S1", bytes_read, mono_bytes);
-        }
-    } else if (err != ESP_OK) {
-        // Ошибка чтения
-        static int error_counter = 0;
-        if (++error_counter >= 1000) {  // Логируем только раз в ~10 секунд
-            error_counter = 0;
-            ESP_LOGW(TAG, "Microphone: i2s_read error: %s", esp_err_to_name(err));
+            ESP_LOGD(TAG, "Microphone: read %zu stereo bytes -> %zu mono bytes from I2S1", bytes_read, mono_data.size());
         }
     }
 }

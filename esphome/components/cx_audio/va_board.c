@@ -19,10 +19,11 @@
 #include <string.h>
 #include <esp_log.h>
 #include <audio_board.h>
-// #include <led_pattern.h>  // Не используется в ESPHome
-// #include <led_driver.h>   // Не используется в ESPHome
-// #include <va_led.h>       // Не используется в ESPHome
-// #include <button_driver.h> // Не используется в ESPHome
+// LED и button драйверы не используются в ESPHome
+// #include <led_pattern.h>
+// #include <led_driver.h>
+// #include <va_led.h>
+// #include <button_driver.h>
 #include <va_board.h>
 #include <va_dsp.h>
 #include <va_dsp_cnx.h>
@@ -30,7 +31,13 @@
 #include <media_hal_playback.h>
 #include <va_dsp_hal.h>
 
+#include <driver/i2c.h>
+
 #define VA_TAG "AUDIO_BOARD"
+
+#define I2C_BUS_NO I2C_NUM_0
+#define SDA_PIN 18
+#define SCL_PIN 23
 
 bool ab_but_mute = false;
 
@@ -49,6 +56,19 @@ int va_board_init() {
   fflush(stdout);
   ESP_LOGI(VA_TAG, "=== Starting va_board_init() ===");
   fflush(stdout);
+
+  // Initialize I2C first
+  i2c_config_t i2c_conf = {
+      .mode = I2C_MODE_MASTER,
+      .sda_io_num = SDA_PIN,
+      .scl_io_num = SCL_PIN,
+      .sda_pullup_en = GPIO_PULLUP_ENABLE,
+      .scl_pullup_en = GPIO_PULLUP_ENABLE,
+      .master.clk_speed = 100000,
+  };
+  ESP_LOGI(VA_TAG, "Configuring I2C (SDA:%d, SCL:%d)", SDA_PIN, SCL_PIN);
+  i2c_param_config(I2C_BUS_NO, &i2c_conf);
+  i2c_driver_install(I2C_BUS_NO, I2C_MODE_MASTER, 0, 0, 0);
 
   i2s_config_t i2s_cfg = {};
   ESP_LOGI(VA_TAG, "Calling audio_board_i2s_init_default()");

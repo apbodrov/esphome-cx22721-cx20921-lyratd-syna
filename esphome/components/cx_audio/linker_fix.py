@@ -5,87 +5,60 @@ import os
 # Но компонент находится в esphome_src/esphome/components/cx_audio/
 # Нужно найти esphome_src относительно PROJECT_DIR
 
-# Сначала пробуем найти относительно скрипта (если __file__ определен)
-monolith = None
-try:
-    script_path = os.path.dirname(os.path.abspath(__file__))
-    # script_path = .../esphome_src/esphome/components/cx_audio/
-    monolith = os.path.join(script_path, "lib", "libva_sdk_monolith.a")
-    if not os.path.exists(monolith):
-        monolith = None
-except:
-    pass
+# Поиск библиотеки libcnx-ipc.a
+import os
 
-# Если не нашли, пробуем через PROJECT_DIR
-if monolith is None or not os.path.exists(monolith):
-    # PROJECT_DIR может быть esphome_src или esphome_src/.esphome/build/...
-    project_dir = env["PROJECT_DIR"]
+project_dir = env.subst("$PROJECT_DIR")
+# Если мы внутри .esphome/build/..., поднимаемся выше
+if ".esphome" in project_dir:
+    project_root = project_dir.split(".esphome")[0]
+else:
+    project_root = project_dir
 
-    # Пробуем разные варианты путей
-    paths_to_try = [
-        os.path.join(
-            project_dir,
-            "esphome",
-            "components",
-            "cx_audio",
-            "lib",
-            "libva_sdk_monolith.a",
-        ),
-        os.path.join(
-            os.path.dirname(project_dir),
-            "esphome",
-            "components",
-            "cx_audio",
-            "lib",
-            "libva_sdk_monolith.a",
-        ),
-    ]
+# Варианты путей к библиотеке
+search_paths = [
+    os.path.join(project_root, "esphome_src", "esphome", "components", "cx_audio", "lib", "libcnx-ipc.a"),
+    os.path.join(project_root, "esphome", "components", "cx_audio", "lib", "libcnx-ipc.a"),
+    os.path.join(os.getcwd(), "esphome", "components", "cx_audio", "lib", "libcnx-ipc.a"),
+    os.path.join(os.getcwd(), "lib", "libcnx-ipc.a"),
+]
 
-    # Если PROJECT_DIR содержит .esphome, поднимаемся выше
-    if ".esphome" in project_dir:
-        base_dir = project_dir.split(".esphome")[0]
-        paths_to_try.append(
-            os.path.join(
-                base_dir,
-                "esphome",
-                "components",
-                "cx_audio",
-                "lib",
-                "libva_sdk_monolith.a",
-            )
-        )
+libcnx_ipc = None
+for path in search_paths:
+    if os.path.exists(path):
+        libcnx_ipc = path
+        break
 
-    for path in paths_to_try:
-        if os.path.exists(path):
-            monolith = path
-            break
+if libcnx_ipc is None:
+    print(f"ERROR: Cannot find libcnx-ipc.a. Checked paths:")
+    for path in search_paths:
+        print(f"  - {path}")
+    print(f"PROJECT_DIR: {project_dir}")
+    print(f"Current Dir: {os.getcwd()}")
+    raise FileNotFoundError("libcnx-ipc.a not found")
 
-# Если все еще не нашли - ошибка
-if monolith is None or not os.path.exists(monolith):
-    print("ERROR: Cannot find libva_sdk_monolith.a")
-    print(f"  PROJECT_DIR: {env['PROJECT_DIR']}")
-    if "script_path" in locals():
-        print(f"  Script path: {script_path}")
-    raise FileNotFoundError("libva_sdk_monolith.a not found")
+component_dir = os.path.dirname(os.path.dirname(libcnx_ipc))
 
-print(f"CX_AUDIO [LINKER FIX]: Applying isolation. Monolith: {monolith}")
-print("CX_AUDIO [LINKER FIX]: libcnx-ipc.a already included in monolith")
+print(f"CX_AUDIO [LINKER FIX]: Using libcnx-ipc.a instead of monolith")
+print(f"CX_AUDIO [LINKER FIX]: Lib path: {libcnx_ipc}")
+print(f"CX_AUDIO [LINKER FIX]: Component dir: {component_dir}")
 
-# Добавляем флаги ТОЛЬКО для приложения
-# env.Append(LINKFLAGS=...) в PlatformIO ESP-IDF сборке обычно
-# нацелен на финальный firmware.elf
+# Явно добавляем файлы для компиляции через PlatformIO
+# ESPHome автоматически компилирует .c и .cpp файлы из корня компонента
+# Но мы можем добавить их в SRC_FILTER если нужно. По умолчанию они подхватываются.
+
+# Добавляем флаги -u для функций из библиотеки, чтобы они линковались
 env.Append(
     LINKFLAGS=[
-        "-Wl,-u,va_board_init",
-        "-Wl,-u,media_hal_get_handle",
-        "-Wl,-u,va_dsp_init",
         "-Wl,-u,cnx20921_init",
+        "-Wl,-u,cx20921SetMicGain",
+        "-Wl,-u,cnx20921_start_speech",
+        "-Wl,-u,cnx20921_stop_capture",
         "-Wl,-u,cnx20921_stream_audio",
-        "-Wl,-u,va_dsp_hal_init",
-        "-Wl,--whole-archive",
-        monolith,
-        "-Wl,--no-whole-archive",
-    ]
+            "-Wl,--wrap=i2c_master_cmd_begin",
+            "-Wl,--whole-archive",
+            libcnx_ipc,
+            "-Wl,--no-whole-archive",    ]
 )
 
 # Включаем стандартную библиотеку C++

@@ -17,6 +17,12 @@ static SemaphoreHandle_t dsp_sem = NULL;
 static int dsp_int_pin = -1;
 static int dsp_mute_pin = -1;
 
+void cnx_pin_config(int cnx_intr_pin, int cnx_mute_pin) {
+  dsp_int_pin = cnx_intr_pin;
+  dsp_mute_pin = cnx_mute_pin;
+  ESP_LOGI(TAG, "cnx_pin_config: intr=%d, mute=%d", dsp_int_pin, dsp_mute_pin);
+}
+
 esp_err_t va_dsp_hal_configure(void *config) {
   (void) config;
   return ESP_OK;

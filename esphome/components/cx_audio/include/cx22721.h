@@ -43,7 +43,7 @@
 
 esp_err_t cx22721_init(media_hal_config_t *media_hal_conf);
 
-esp_err_t cx22721_set_vol(int vol);
+esp_err_t cx22721_set_vol(uint8_t vol);
 
 esp_err_t cx22721_set_mute(bool mute);
 

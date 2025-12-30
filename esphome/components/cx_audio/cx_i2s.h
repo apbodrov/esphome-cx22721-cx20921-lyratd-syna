@@ -23,7 +23,7 @@ class CXI2SMicrophone : public microphone::Microphone, public Component {
 
  protected:
   cx_audio::CXAudio *parent_;
-  float mic_gain_{24.0f};  // Default 24dB
+  float mic_gain_{15.0f};  // Middle of 0-30dB range
 };
 
 class CXI2SSpeaker : public speaker::Speaker, public Component {

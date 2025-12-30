@@ -373,3 +373,29 @@ void va_dsp_init_internal(va_dsp_recognize_cb_t va_dsp_recognize_cb, va_dsp_reco
 
   va_dsp_data.va_dsp_booted = true;
 }
+
+// Wrapper для va_dsp_init, который вызывает va_dsp_init_internal и затем va_boot_dsp_signal
+// Это гарантирует, что очередь создана до вызова va_boot_dsp_signal()
+// Используем __wrap_va_dsp_init для переопределения через --wrap линкера
+void __wrap_va_dsp_init(va_dsp_recognize_cb_t va_dsp_recognize_cb, va_dsp_record_cb_t va_dsp_record_cb,
+                 va_dsp_notify_mute_cb_t va_dsp_mute_notify_cb) {
+  ESP_LOGI(TAG, "va_dsp_init: Using our implementation (queue will be created first)");
+  
+  // Вызываем внутреннюю инициализацию, которая создает очередь
+  va_dsp_init_internal(va_dsp_recognize_cb, va_dsp_record_cb, va_dsp_mute_notify_cb);
+  
+  // Проверяем, что очередь создана
+  if (va_dsp_data.cmd_queue == NULL) {
+    ESP_LOGE(TAG, "va_dsp_init: cmd_queue is NULL after va_dsp_init_internal!");
+    return;
+  }
+  
+  ESP_LOGI(TAG, "va_dsp_init: Queue created, calling va_boot_dsp_signal()");
+  
+  // Теперь очередь создана, можно вызывать va_boot_dsp_signal()
+  // va_boot_dsp_signal определена в библиотеке и использует очередь
+  extern void va_boot_dsp_signal(void);
+  va_boot_dsp_signal();
+  
+  ESP_LOGI(TAG, "va_dsp_init: Completed successfully");
+}
