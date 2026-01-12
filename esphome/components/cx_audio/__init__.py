@@ -31,12 +31,4 @@ async def to_code(config):
 
     # Используем скрипт для изоляции линковки монолита от загрузчика
     cg.add_platformio_option("extra_scripts", [os.path.join(this_dir, "linker_fix.py")])
-    
-    # Добавляем пути для компиляции адаптеров и SDK файлов
-    src_sdk_dir = os.path.join(this_dir, "src_sdk")
-    sdk_adapter_dir = os.path.join(this_dir, "sdk_adapter")
-    
-    # ESPHome автоматически компилирует файлы из поддиректорий компонента
-    # Добавляем include пути для заголовков
-    cg.add_build_flag(f"-I{src_sdk_dir}")
-    cg.add_build_flag(f"-I{sdk_adapter_dir}")
+

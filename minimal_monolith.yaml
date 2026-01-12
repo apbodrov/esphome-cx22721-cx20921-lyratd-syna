@@ -57,6 +57,7 @@ microphone:
   - platform: cx_i2s
     id: my_mic
     cx_audio_id: my_cx_audio
+    mic_gain: -10dB
 
 speaker:
   - platform: cx_i2s
