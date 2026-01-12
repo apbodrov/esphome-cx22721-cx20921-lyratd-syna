@@ -49,6 +49,6 @@ async def to_code(config):
 
     parent = await cg.get_variable(config[CONF_CX_AUDIO_ID])
     cg.add(var.set_cx_audio(parent))
-    
+
     if CONF_MIC_GAIN in config:
         cg.add(var.set_mic_gain(config[CONF_MIC_GAIN]))
