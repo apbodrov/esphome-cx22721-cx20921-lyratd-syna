@@ -114,9 +114,8 @@ void CXI2SMicrophone::stop() {
 }
 
 bool CXI2SMicrophone::set_mic_gain(float mic_gain) {
-    // CX20921 поддерживает гейн от 0 до 30 dB (обычно)
-    // Ограничиваем диапазон для безопасности
-    this->mic_gain_ = clamp<float>(mic_gain, 0.0f, 30.0f);
+    // Расширяем диапазон: от ослабления (-50дБ) до мощного усиления (50дБ)
+    this->mic_gain_ = clamp<float>(mic_gain, -50.0f, 50.0f);
     
     // Если микрофон уже инициализирован (не в состоянии STOPPED), применяем гейн сразу
     if (this->state_ != microphone::STATE_STOPPED && !this->is_failed()) {

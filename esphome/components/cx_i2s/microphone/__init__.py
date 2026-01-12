@@ -33,7 +33,7 @@ CONFIG_SCHEMA = cv.All(
             cv.GenerateID(): cv.declare_id(CXI2SMicrophone),
             cv.GenerateID(CONF_CX_AUDIO_ID): cv.use_id(cx_audio.CXAudio),
             cv.Optional(CONF_MIC_GAIN, default="24db"): cv.All(
-                cv.decibel, cv.float_range(min=0, max=30)
+                cv.decibel, cv.float_range(min=-50, max=50)
             ),
         }
     ).extend(cv.COMPONENT_SCHEMA),
