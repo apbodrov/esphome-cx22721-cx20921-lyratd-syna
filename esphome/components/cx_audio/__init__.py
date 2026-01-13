@@ -31,4 +31,3 @@ async def to_code(config):
 
     # Используем скрипт для изоляции линковки монолита от загрузчика
     cg.add_platformio_option("extra_scripts", [os.path.join(this_dir, "linker_fix.py")])
-

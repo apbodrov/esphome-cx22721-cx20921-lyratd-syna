@@ -82,15 +82,13 @@ void CXI2SMicrophone::setup() {
   vTaskDelay(pdMS_TO_TICKS(500));
 
   // Устанавливаем гейн микрофона после полной инициализации DSP
-  if (this->mic_gain_ > 0) {
-    int gain_db = (int) this->mic_gain_;
-    ESP_LOGI(TAG, "Setting microphone gain to %d dB...", gain_db);
-    int ret_gain = cx20921SetMicGain(gain_db);
-    if (ret_gain == 0) {
-      ESP_LOGI(TAG, "Microphone gain set to %d dB", gain_db);
-    } else {
-      ESP_LOGW(TAG, "Failed to set microphone gain: %d (I2C may not be ready)", ret_gain);
-    }
+  int gain_db = (int) this->mic_gain_;
+  ESP_LOGI(TAG, "Setting microphone gain to %d dB...", gain_db);
+  int ret_gain = cx20921SetMicGain(gain_db);
+  if (ret_gain == 0) {
+    ESP_LOGI(TAG, "Microphone gain set to %d dB", gain_db);
+  } else {
+    ESP_LOGW(TAG, "Failed to set microphone gain: %d (I2C may not be ready)", ret_gain);
   }
 
   ESP_LOGI(TAG, "Microphone setup complete");
