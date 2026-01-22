@@ -37,10 +37,10 @@ void CXI2SMicrophone::setup() {
   esphome_va_dsp_init(nullptr, nullptr, nullptr);
 
   // Инициализируем сам DSP чип CX20921 после va_dsp_init()
-  // На LyraTD V1.2: reset_pin=21 (GPIO21), int_pin=36, mute_pin=27
+  // На LyraTD V1.2: reset_pin=21 (GPIO21), int_pin=36, mute_pin=-1 (освобождаем 27 для LED)
   gpio_num_t reset_pin = GPIO_NUM_21;  // ЭТАЛОН: GPIO21 для V1.2
   int int_pin = 36;
-  int mute_pin = 27;
+  int mute_pin = -1;
 
   ESP_LOGI(TAG, "Initializing CX20921 DSP chip (reset=%d, int=%d, mute=%d)...", reset_pin, int_pin, mute_pin);
 
@@ -83,12 +83,17 @@ void CXI2SMicrophone::setup() {
 
   // Устанавливаем гейн микрофона после полной инициализации DSP
   int gain_db = (int) this->mic_gain_;
+  int before_gain = cx20921GetMicGain();
+  ESP_LOGI(TAG, "Microphone gain BEFORE setting: %d dB", before_gain);
+  
   ESP_LOGI(TAG, "Setting microphone gain to %d dB...", gain_db);
   int ret_gain = cx20921SetMicGain(gain_db);
+  
+  int after_gain = cx20921GetMicGain();
   if (ret_gain == 0) {
-    ESP_LOGI(TAG, "Microphone gain set to %d dB", gain_db);
+    ESP_LOGI(TAG, "Microphone gain set to %d dB (confirmed: %d dB)", gain_db, after_gain);
   } else {
-    ESP_LOGW(TAG, "Failed to set microphone gain: %d (I2C may not be ready)", ret_gain);
+    ESP_LOGW(TAG, "Failed to set microphone gain: %d (I2C may not be ready). Current: %d dB", ret_gain, after_gain);
   }
 
   ESP_LOGI(TAG, "Microphone setup complete");

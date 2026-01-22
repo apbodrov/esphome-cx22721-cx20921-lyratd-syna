@@ -162,8 +162,9 @@ int va_board_init() {
 
   // CNX Interrupt Pin config
   ESP_LOGI(VA_TAG, "Configuring CNX interrupt pins");
-  cnx_pin_config(GPIO_NUM_36, GPIO_NUM_27);
-  ESP_LOGI(VA_TAG, "CNX interrupt pins configured");
+  // GPIO27 используется для светодиодного кольца, поэтому убираем его из Mute
+  cnx_pin_config(GPIO_NUM_36, -1);
+  ESP_LOGI(VA_TAG, "CNX interrupt pins configured (Mute disabled to free GPIO27)");
 
   // Initialize buttons and LEDs
   ESP_LOGI(VA_TAG, "Initializing buttons");
