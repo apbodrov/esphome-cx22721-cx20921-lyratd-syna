@@ -77,7 +77,10 @@ void CXAudio::setup() {
   }
 }
 
-void CXAudio::dump_config() { ESP_LOGCONFIG(TAG, "Synaptics CX20921 Audio"); }
+void CXAudio::dump_config() { 
+  ESP_LOGCONFIG(TAG, "Synaptics CX20921 Audio:");
+  ESP_LOGCONFIG(TAG, "  Use Firmware: %s", this->use_firmware_ ? "YES" : "NO");
+}
 
 }  // namespace cx_audio
 }  // namespace esphome

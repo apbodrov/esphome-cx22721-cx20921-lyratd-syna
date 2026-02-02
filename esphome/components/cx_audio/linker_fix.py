@@ -33,10 +33,12 @@ env.Append(
         "-Wl,-u,cnx20921_init",
         "-Wl,-u,cnx20921_stream_audio",
         "-Wl,-u,cx20921SetMicGain",
-        "-Wl,-u,va_boot_dsp_signal",  # Наш Glue символ
-        "-Wl,-u,esp_vfs_spiffs_register",
-        "-Wl,--wrap=i2c_master_cmd_begin",
-        # Подключаем обе библиотеки целиком
+                "-Wl,-u,va_boot_dsp_signal", # Наш Glue символ
+                "-Wl,-u,esp_vfs_spiffs_register",
+                "-Wl,--wrap=i2c_master_cmd_begin",
+                "-Wl,--wrap=cnx20921_init",
+                # Подключаем обе библиотеки целиком
+        
         "-Wl,--whole-archive",
         libcnx_path,
         libva_dsp_path,

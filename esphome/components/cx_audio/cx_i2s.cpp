@@ -21,13 +21,21 @@ namespace cx_i2s {
 
 static const char *const TAG = "cx_i2s";
 
+extern "C" void esphome_set_dsp_fw_mode(int mode);
+
 void CXI2SMicrophone::setup() {
   ESP_LOGI(TAG, "Setting up CX I2S Microphone...");
 
-  // 1. Инициализируем HAL DSP
-  va_dsp_init(nullptr, nullptr, nullptr);
+  // 1. Проверяем флаги ДО инициализации библиотеки
+  bool use_fw = this->parent_->is_use_firmware();
+  int fw_mode = use_fw ? 1 : 0;
+  ESP_LOGI(TAG, "DSP Init Config: use_firmware=%s, mode=%d", use_fw ? "YES" : "NO", fw_mode);
 
-  // 2. Hardware Reset DSP (GPIO21)
+  // Устанавливаем режим для нашего враппера __wrap_cnx20921_init
+  esphome_set_dsp_fw_mode(fw_mode);
+
+  // 2. Hardware Reset DSP (GPIO21) - делаем сами до библиотеки
+  ESP_LOGI(TAG, "Performing hardware reset on GPIO21...");
   gpio_num_t reset_pin = GPIO_NUM_21;
   gpio_config_t io_conf = {.pin_bit_mask = (1ULL << reset_pin),
                            .mode = GPIO_MODE_OUTPUT,
@@ -40,22 +48,13 @@ void CXI2SMicrophone::setup() {
   gpio_set_level(reset_pin, 1);
   vTaskDelay(pdMS_TO_TICKS(500));
 
-  // 3. Инициализируем чип через SDK
-  bool use_fw = this->parent_->is_use_firmware();
-  int fw_mode = use_fw ? 1 : 0;
+  // 3. Инициализируем HAL DSP
+  // ВНИМАНИЕ: По логам видно, что va_dsp_init сама вызывает cnx20921_init внутри!
+  ESP_LOGI(TAG, "Calling va_dsp_init...");
+  va_dsp_init(nullptr, nullptr, nullptr);
+  ESP_LOGI(TAG, "va_dsp_init returned");
 
-  ESP_LOGI(TAG, "Initializing DSP chip (mode: %s)...", use_fw ? "FLASH_FW" : "NO_FLASH_FW");
-
-  SemaphoreHandle_t semph = xSemaphoreCreateMutex();
-  esp_err_t ret = cnx20921_init(semph, 36, -1, (cnx_mode_t) fw_mode);
-
-  if (ret != ESP_OK) {
-    ESP_LOGE(TAG, "cnx20921_init failed: %s", esp_err_to_name(ret));
-  } else {
-    ESP_LOGI(TAG, "CX20921 initialized successfully");
-  }
-
-  // 4. Установка начального гейна
+  // 4. Попытка установки гейна (если чип уже готов)
   if (this->mic_gain_ != 0.0f) {
     cx20921SetMicGain((int) this->mic_gain_);
   }

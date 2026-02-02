@@ -107,6 +107,34 @@ int i2s_read_bytes(i2s_port_t i2s_num, char *dest, size_t size, TickType_t ticks
 }
 
 // ============================================================================
+// DSP Initialization Override Wrapper
+// Перехватываем вызов cnx20921_init из va_dsp_init, чтобы принудительно 
+// выключить прошивку, если это задано в YAML.
+// ============================================================================
+typedef enum { NO_FLASH_FW = 0, FLASH_FW = 1 } cnx_mode_t;
+extern "C" esp_err_t __real_cnx20921_init(SemaphoreHandle_t semph, int int_pin, int mute_pin, cnx_mode_t flash_fw);
+
+// Глобальная переменная для хранения желаемого режима
+static int g_dsp_fw_mode = -1; 
+
+extern "C" void esphome_set_dsp_fw_mode(int mode) {
+    g_dsp_fw_mode = mode;
+}
+
+extern "C" esp_err_t __wrap_cnx20921_init(SemaphoreHandle_t semph, int int_pin, int mute_pin, cnx_mode_t flash_fw) {
+    cnx_mode_t mode_to_use = flash_fw;
+    
+    if (g_dsp_fw_mode != -1) {
+        mode_to_use = (cnx_mode_t)g_dsp_fw_mode;
+        ESP_LOGW("DSP_WRAP", "Overriding SDK flash mode: SDK asked %d, we use %d", flash_fw, mode_to_use);
+    } else {
+        ESP_LOGI("DSP_WRAP", "Using SDK default flash mode: %d", flash_fw);
+    }
+
+    return __real_cnx20921_init(semph, int_pin, mute_pin, mode_to_use);
+}
+
+// ============================================================================
 // I2C Watchdog Feeder & Sync Wrapper
 // Сбрасываем вочдог при каждой I2C транзакции, чтобы не упасть во время прошивки DSP
 // ============================================================================
