@@ -16,7 +16,7 @@ namespace cx_audio {
 
 static const char *const TAG = "cx_audio";
 
-// Добавляем "защитный слой" вокруг указателя на семафор, чтобы защититься от 
+// Добавляем "защитный слой" вокруг указателя на семафор, чтобы защититься от
 // переполнения буферов в закрытой библиотеке SDK.
 static uint8_t g_padding_before[256];
 SemaphoreHandle_t CXAudio::i2c_sem_ = nullptr;
@@ -31,22 +31,16 @@ SemaphoreHandle_t CXAudio::get_i2c_semaphore() {
   return i2c_sem_;
 }
 
-extern "C" SemaphoreHandle_t esphome_get_i2c_semaphore() {
-  return esphome::cx_audio::CXAudio::get_i2c_semaphore();
-}
+extern "C" SemaphoreHandle_t esphome_get_i2c_semaphore() { return esphome::cx_audio::CXAudio::get_i2c_semaphore(); }
 
 void CXAudio::setup() {
   ESP_LOGI(TAG, "Setting up Synaptics Audio Component...");
-  
+
   // Монтируем SPIFFS для прошивки DSP
   if (this->use_firmware_) {
     ESP_LOGI(TAG, "Mounting SPIFFS for DSP Firmware...");
     esp_vfs_spiffs_conf_t conf = {
-      .base_path = "/spiffs",
-      .partition_label = "storage",
-      .max_files = 5,
-      .format_if_mount_failed = false
-    };
+        .base_path = "/spiffs", .partition_label = "storage", .max_files = 5, .format_if_mount_failed = false};
     esp_err_t ret = esp_vfs_spiffs_register(&conf);
     if (ret != ESP_OK) {
       if (ret == ESP_FAIL) {

@@ -10,7 +10,9 @@ else:
 # Пути к оригинальным библиотекам SDK
 lib_dir = os.path.join(project_root, "esphome", "components", "cx_audio", "lib")
 if not os.path.exists(lib_dir):
-    lib_dir = os.path.join(project_root, "esphome_src", "esphome", "components", "cx_audio", "lib")
+    lib_dir = os.path.join(
+        project_root, "esphome_src", "esphome", "components", "cx_audio", "lib"
+    )
 
 libva_dsp_path = os.path.join(lib_dir, "libva_dsp.a")
 libcnx_path = os.path.join(lib_dir, "libcnx-ipc.a")
@@ -20,7 +22,7 @@ for p in [libva_dsp_path, libcnx_path]:
         print(f"ERROR: {p} not found!")
         raise FileNotFoundError(p)
 
-print(f"CX_AUDIO [LINKER]: Using Original SDK Libs.")
+print("CX_AUDIO [LINKER]: Using Original SDK Libs.")
 print(f"  VA_DSP: {libva_dsp_path}")
 print(f"  CNX_IPC: {libcnx_path}")
 
@@ -31,7 +33,7 @@ env.Append(
         "-Wl,-u,cnx20921_init",
         "-Wl,-u,cnx20921_stream_audio",
         "-Wl,-u,cx20921SetMicGain",
-        "-Wl,-u,va_boot_dsp_signal", # Наш Glue символ
+        "-Wl,-u,va_boot_dsp_signal",  # Наш Glue символ
         "-Wl,-u,esp_vfs_spiffs_register",
         "-Wl,--wrap=i2c_master_cmd_begin",
         # Подключаем обе библиотеки целиком

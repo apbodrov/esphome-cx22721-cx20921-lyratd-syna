@@ -54,18 +54,20 @@ int va_board_init() {
   // 3. Установка драйверов I2S
   // Порт 0 для воспроизведения (Кодек)
   ret = i2s_driver_install(I2S_PORT_NUM, &i2s_cfg, 0, NULL);
-  if (ret != ESP_OK) return ret;
+  if (ret != ESP_OK)
+    return ret;
 
   // Порт 1 для записи (DSP)
-  i2s_cfg.mode = (i2s_mode_t)(I2S_MODE_SLAVE | I2S_MODE_RX);
+  i2s_cfg.mode = (i2s_mode_t) (I2S_MODE_SLAVE | I2S_MODE_RX);
   ret = i2s_driver_install(I2S_NUM_1, &i2s_cfg, 0, NULL);
-  if (ret != ESP_OK) return ret;
+  if (ret != ESP_OK)
+    return ret;
 
   // 4. Настройка пинов I2S
   i2s_pin_config_t pf_i2s_pin = {0};
   audio_board_i2s_pin_config(I2S_PORT_NUM, &pf_i2s_pin);
   i2s_set_pin(I2S_PORT_NUM, &pf_i2s_pin);
-  
+
   audio_board_i2s_pin_config(I2S_NUM_1, &pf_i2s_pin);
   i2s_set_pin(I2S_NUM_1, &pf_i2s_pin);
 
