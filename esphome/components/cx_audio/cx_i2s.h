@@ -19,11 +19,12 @@ class CXI2SMicrophone : public microphone::Microphone, public Component {
   bool is_running() const { return this->state_ == microphone::STATE_RUNNING; }
   void publish_data(const std::vector<uint8_t> &data);
   bool set_mic_gain(float mic_gain);
+  float get_mic_gain_value() const { return mic_gain_; }
   float mic_gain() { return this->mic_gain_; }
 
  protected:
   cx_audio::CXAudio *parent_;
-  float mic_gain_{0.0f};  // Will be set from YAML config
+  float mic_gain_{24.0f};  // Default 24dB
 };
 
 class CXI2SSpeaker : public speaker::Speaker, public Component {

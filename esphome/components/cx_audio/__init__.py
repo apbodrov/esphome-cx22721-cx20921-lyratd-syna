@@ -10,9 +10,12 @@ DEPENDENCIES = ["esp32", "microphone", "speaker"]
 cx_audio_ns = cg.esphome_ns.namespace("cx_audio")
 CXAudio = cx_audio_ns.class_("CXAudio", cg.Component)
 
+CONF_USE_FIRMWARE = "use_firmware"
+
 CONFIG_SCHEMA = cv.Schema(
     {
         cv.GenerateID(): cv.declare_id(CXAudio),
+        cv.Optional(CONF_USE_FIRMWARE, default=False): cv.boolean,
     }
 ).extend(cv.COMPONENT_SCHEMA)
 
@@ -20,6 +23,10 @@ CONFIG_SCHEMA = cv.Schema(
 async def to_code(config):
     var = cg.new_Pvariable(config[CONF_ID])
     await cg.register_component(var, config)
+    
+    if config[CONF_USE_FIRMWARE]:
+        cg.add(var.set_use_firmware(True))
+        cg.add_build_flag("-DUSE_CX20921_FIRMWARE")
 
     this_dir = os.path.dirname(os.path.abspath(__file__))
     include_dir = os.path.join(this_dir, "include")

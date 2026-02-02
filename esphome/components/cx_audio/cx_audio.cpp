@@ -1,5 +1,6 @@
 #include "cx_audio.h"
 #include "esphome/core/log.h"
+#include <esp_spiffs.h>
 
 extern "C" {
 #include <va_board.h>
@@ -37,6 +38,35 @@ extern "C" SemaphoreHandle_t esphome_get_i2c_semaphore() {
 void CXAudio::setup() {
   ESP_LOGI(TAG, "Setting up Synaptics Audio Component...");
   
+  // Монтируем SPIFFS для прошивки DSP
+  if (this->use_firmware_) {
+    ESP_LOGI(TAG, "Mounting SPIFFS for DSP Firmware...");
+    esp_vfs_spiffs_conf_t conf = {
+      .base_path = "/spiffs",
+      .partition_label = "storage",
+      .max_files = 5,
+      .format_if_mount_failed = false
+    };
+    esp_err_t ret = esp_vfs_spiffs_register(&conf);
+    if (ret != ESP_OK) {
+      if (ret == ESP_FAIL) {
+        ESP_LOGE(TAG, "Failed to mount or format filesystem");
+      } else if (ret == ESP_ERR_NOT_FOUND) {
+        ESP_LOGE(TAG, "Failed to find SPIFFS partition (storage)");
+      } else {
+        ESP_LOGE(TAG, "Failed to initialize SPIFFS (%s)", esp_err_to_name(ret));
+      }
+    } else {
+      size_t total = 0, used = 0;
+      ret = esp_spiffs_info("storage", &total, &used);
+      if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to get SPIFFS partition information (%s)", esp_err_to_name(ret));
+      } else {
+        ESP_LOGI(TAG, "Partition size: total: %d, used: %d", total, used);
+      }
+    }
+  }
+
   if (i2c_sem_ == nullptr) {
     i2c_sem_ = xSemaphoreCreateMutex();
   }

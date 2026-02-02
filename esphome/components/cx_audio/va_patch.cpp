@@ -1,22 +1,20 @@
-// Патчи для SDK функций, которые требуют реализации в ESPHome
-// ВАЖНО: Все weak символы и wrappers удалены - используем адаптеры из sdk_adapter/
+// Glue-код для связи ESPHome с оригинальными библиотеками Synaptics SDK
+// Реализует функции, которые библиотека libva_dsp.a ожидает от внешнего SDK фреймворка
 
 #include <esp_err.h>
 #include <esp_log.h>
 #include <nvs_flash.h>
 #include <driver/i2s.h>
 #include <driver/i2c.h>
+#include <driver/gpio.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
+#include <esp_task_wdt.h>
 #include <stddef.h>
 
-// Forward declarations для адаптеров
+// Forward declarations для адаптеров из rb_adapter.c
 extern "C" {
 typedef void* rb_handle_t;
-void* esphome_esp_audio_mem_calloc(size_t n, size_t size);
-void* esphome_esp_audio_mem_malloc(size_t size);
-void esphome_esp_audio_mem_free(void* ptr);
-void* esphome_esp_audio_mem_realloc(void* ptr, size_t size);
 rb_handle_t esphome_rb_init(const char* name, uint32_t size);
 int esphome_rb_read(rb_handle_t handle, uint8_t* buf, int len, uint32_t timeout);
 int esphome_rb_write(rb_handle_t handle, uint8_t* buf, int len, uint32_t timeout);
@@ -28,26 +26,26 @@ void esphome_rb_reset(rb_handle_t handle);
 extern "C" {
 
 // ============================================================================
-// Алиасы для функций памяти - библиотека ожидает esp_audio_mem_*
+// Memory Management Glue
 // ============================================================================
 void* esp_audio_mem_calloc(int n, int size) {
-    return esphome_esp_audio_mem_calloc((size_t)n, (size_t)size);
+    return calloc(n, size);
 }
 
 void* esp_audio_mem_malloc(int size) {
-    return esphome_esp_audio_mem_malloc((size_t)size);
+    return malloc(size);
 }
 
 void esp_audio_mem_free(void* ptr) {
-    esphome_esp_audio_mem_free(ptr);
+    free(ptr);
 }
 
 void* esp_audio_mem_realloc(void* old_ptr, int old_size, int new_size) {
-    return esphome_esp_audio_mem_realloc(old_ptr, (size_t)new_size);
+    return realloc(old_ptr, new_size);
 }
 
 // ============================================================================
-// Алиасы для ring buffer функций - библиотека ожидает rb_*
+// Ring Buffer Glue
 // ============================================================================
 rb_handle_t rb_init(const char* name, uint32_t size) {
     return esphome_rb_init(name, size);
@@ -74,11 +72,30 @@ void rb_reset(rb_handle_t handle) {
 }
 
 // ============================================================================
+// SDK State Signals Glue
+// ============================================================================
+void va_boot_dsp_signal(void) {
+    ESP_LOGI("VA_PATCH", "DSP Boot Signal: DSP is ready");
+}
+
+void va_ui_set_state(int state) {
+    (void)state;
+}
+
+void va_button_notify_mute(bool mute) {
+    (void)mute;
+}
+
+void va_set_state(int state) {
+    (void)state;
+}
+
+// ============================================================================
 // NVS Utils Patch
 // ============================================================================
 esp_err_t va_nvs_set_i8(const char *key, int8_t val) {
     nvs_handle_t my_handle;
-    esp_err_t err = nvs_open("storage", NVS_READWRITE, &my_handle);
+    esp_err_t err = nvs_open("storage_nvs", NVS_READWRITE, &my_handle);
     if (err != ESP_OK) return err;
     err = nvs_set_i8(my_handle, key, val);
     nvs_commit(my_handle);
@@ -88,7 +105,7 @@ esp_err_t va_nvs_set_i8(const char *key, int8_t val) {
 
 esp_err_t va_nvs_get_i8(const char *key, int8_t *val) {
     nvs_handle_t my_handle;
-    esp_err_t err = nvs_open("storage", NVS_READONLY, &my_handle);
+    esp_err_t err = nvs_open("storage_nvs", NVS_READONLY, &my_handle);
     if (err != ESP_OK) return err;
     err = nvs_get_i8(my_handle, key, val);
     nvs_close(my_handle);
@@ -96,29 +113,12 @@ esp_err_t va_nvs_get_i8(const char *key, int8_t *val) {
 }
 
 // ============================================================================
-// Audio Resample Patch
+// Audio Utilities Patch
 // ============================================================================
 int audio_resample_down_channel(short *src, short *dst, int src_rate, int dst_rate, int src_ch, int dst_size, int item_size, int mode) {
-    (void)src; (void)dst; (void)src_rate; (void)dst_rate; (void)src_ch; (void)dst_size; (void)item_size; (void)mode;
     return 0; 
 }
 
-// ============================================================================
-// DSP HAL Configure Patch
-// ============================================================================
-// Функция va_dsp_hal_configure теперь определена в va_dsp_hal.c
-// Удалено отсюда, чтобы избежать множественного определения
-
-// ============================================================================
-// Button Mute Notification Patch
-// ============================================================================
-void va_button_notify_mute(bool mute) {
-    ESP_LOGI("VA_PATCH", "Mute notification: %s", mute ? "ON" : "OFF");
-}
-
-// ============================================================================
-// I2S Read Bytes Compatibility Patch
-// ============================================================================
 int i2s_read_bytes(i2s_port_t i2s_num, char *dest, size_t size, TickType_t ticks_to_wait) {
     size_t bytes_read = 0;
     esp_err_t err = i2s_read(i2s_num, (void*)dest, size, &bytes_read, ticks_to_wait);
@@ -127,30 +127,25 @@ int i2s_read_bytes(i2s_port_t i2s_num, char *dest, size_t size, TickType_t ticks
 }
 
 // ============================================================================
-// I2C Debug & Sync Wrapper
+// I2C Watchdog Feeder & Sync Wrapper
+// Сбрасываем вочдог при каждой I2C транзакции, чтобы не упасть во время прошивки DSP
 // ============================================================================
 extern "C" SemaphoreHandle_t esphome_get_i2c_semaphore();
 extern "C" esp_err_t __real_i2c_master_cmd_begin(i2c_port_t i2c_num, i2c_cmd_handle_t cmd_handle, TickType_t ticks_to_wait);
 
 extern "C" esp_err_t __wrap_i2c_master_cmd_begin(i2c_port_t i2c_num, i2c_cmd_handle_t cmd_handle, TickType_t ticks_to_wait) {
+    // 1. Сбрасываем вочдог для текущей задачи
+    esp_task_wdt_reset();
+
+    // 2. Берем семафор для синхронизации с ESPHome
     SemaphoreHandle_t sem = esphome_get_i2c_semaphore();
-    
-    // Проверка на валидность указателя. В ESP32 валидные адреса RAM обычно начинаются с 0x3F или 0x40.
-    // Адрес 0x14... или 0x38... явно указывает на коррупцию данных из I2C.
-    bool sem_valid = (sem != NULL && ((uint32_t)sem & 0xFF000000) == 0x3F000000);
+    bool sem_valid = (sem != NULL && ((uintptr_t)sem & 0xFF000000) == 0x3F000000);
     
     if (sem_valid) {
         xSemaphoreTake(sem, portMAX_DELAY);
-    } else if (sem != NULL) {
-        // Если указатель есть, но он подозрительный - это коррупция.
-        // Не падаем, но и не берем семафор (рискуем коллизией, но это лучше чем паника).
-        static uint32_t last_bad_sem = 0;
-        if ((uint32_t)sem != last_bad_sem) {
-            ESP_LOGE("I2C_WRAP", "Corrupted semaphore pointer detected: %p! Data leak from SDK suspected.", sem);
-            last_bad_sem = (uint32_t)sem;
-        }
     }
     
+    // 3. Выполняем реальный I2C вызов
     esp_err_t ret = __real_i2c_master_cmd_begin(i2c_num, cmd_handle, ticks_to_wait);
     
     if (sem_valid) {

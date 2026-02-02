@@ -21,15 +21,16 @@ class CXAudio : public Component {
  public:
   void setup() override;
   void dump_config() override;
-  float get_setup_priority() const override { return setup_priority::HARDWARE; }
 
-  media_hal_t *get_hal() { return this->hal_; }
-  
+  void set_use_firmware(bool use) { this->use_firmware_ = use; }
+  bool is_use_firmware() const { return this->use_firmware_; }
+
   static SemaphoreHandle_t get_i2c_semaphore();
 
  private:
   media_hal_t *hal_{nullptr};
   static SemaphoreHandle_t i2c_sem_;
+  bool use_firmware_{false};
 };
 
 }  // namespace cx_audio

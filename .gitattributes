@@ -3,3 +3,4 @@
 *.png binary
 *.a binary
 *.wav binary
+*.bin binary
